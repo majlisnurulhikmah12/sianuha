@@ -1,0 +1,1285 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SIANUHA - Sistem Akademik Majelis Nurul Hikmah</title>
+    <!-- Memuat Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    // Tema warna Hijau Khas Lembaga
+                    colors: {
+                        'majlis-green': '#10b981', // Emerald 500
+                        'majlis-light': '#d1fae5', // Emerald 100
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Gaya dasar untuk memastikan full height dan font */
+        body { 
+            min-height: 100vh; 
+            font-family: 'Inter', sans-serif; 
+            /* Tambahkan padding bawah untuk mengakomodasi bottom nav di mobile */
+            padding-bottom: 4rem; 
+        }
+        @media (min-width: 768px) {
+            body {
+                padding-bottom: 0;
+            }
+        }
+        .scrollable-content { max-height: 70vh; overflow-y: auto; }
+        /* Gaya untuk modal agar transisi lebih smooth */
+        .modal-fade-in { animation: fadeIn 0.3s ease-out; }
+        .modal-zoom-in { animation: zoomIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes zoomIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        
+        /* Gaya khusus untuk tombol Dasbor yang baru */
+        .quick-action-card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 1.5rem;
+            border-radius: 1rem;
+            text-align: center;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            height: 10rem; /* Fixed height for better alignment */
+            position: relative;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .quick-action-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0.1;
+            transition: opacity 0.3s;
+        }
+        .quick-action-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        .quick-action-card:hover::before {
+            opacity: 0.2;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Kontainer utama aplikasi -->
+    <div id="app" class="min-h-screen">
+        <!-- Konten aplikasi akan dimuat di sini -->
+    </div>
+
+    <!-- Custom Confirmation Modal (Mengganti alert()/confirm()) -->
+    <div id="custom-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-gray-900 bg-opacity-50 modal-fade-in">
+        <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-sm m-4 modal-zoom-in">
+            <h3 id="modal-title" class="text-xl font-bold text-gray-800 mb-4 border-b pb-2">Konfirmasi Aksi</h3>
+            <p id="modal-message" class="text-gray-700 mb-6">Apakah Anda yakin ingin melanjutkan tindakan ini?</p>
+            <div class="flex justify-end space-x-3">
+                <button onclick="closeConfirmation()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition">Batal</button>
+                <button id="modal-confirm-btn" onclick="handleConfirm()" class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition font-semibold">Ya, Lanjutkan</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal Input Tautan Dokumen Hasil (Google Drive, dll.) -->
+    <div id="link-input-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-gray-900 bg-opacity-50 modal-fade-in">
+        <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-lg m-4 modal-zoom-in">
+            <h3 id="link-modal-title" class="text-xl font-bold text-majlis-green mb-4 border-b pb-2">Lampirkan Tautan Dokumen</h3>
+            <p class="text-gray-700 mb-4">Masukkan tautan dokumen hasil (misalnya: Google Drive, Dropbox, atau tautan file publik) untuk pengajuan ini.</p>
+            <input type="hidden" id="link-input-submission-id">
+            <div class="mb-6">
+                <label for="link-input-field" class="block text-sm font-medium text-gray-700 mb-1">Tautan Dokumen (URL)</label>
+                <input type="url" id="link-input-field" name="link" required
+                       placeholder="Contoh: https://drive.google.com/link-dokumen.pdf"
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-majlis-green focus:border-majlis-green">
+            </div>
+            <div class="flex justify-end space-x-3">
+                <button onclick="closeLinkInputModal()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition">Batal</button>
+                <button onclick="handleLinkInputConfirm()" class="px-4 py-2 bg-majlis-green text-white rounded-lg hover:bg-emerald-600 transition font-semibold">Lampirkan & Setujui</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State management sederhana untuk simulasi perpindahan halaman
+        let pageState = {
+            view: 'login', // Default view
+            userRole: null, 
+            userName: null,
+            subView: 'list', // State tambahan: 'list', 'detail', 'add'
+            userManagementAction: 'list', // State khusus untuk Manajemen Pengguna: 'list', 'add', 'edit'
+            userToEdit: null, 
+            submissionDetail: null // Untuk detail pengajuan surat
+        };
+
+        const appDiv = document.getElementById('app');
+        let nextTeacherId = 103; // Untuk ID pengajar baru
+        let nextSubmissionId = 5; // Untuk ID pengajuan baru
+
+        // --- Data Mockup untuk Simulasi ---
+        const userCredentials = {
+            'admin@sianuha.com': { password: 'admin', role: 'admin', name: 'Admin Utama' },
+            'ustadz.ali@sianuha.com': { password: 'pengajar', role: 'pengajar', name: 'Ustadz Ali' }
+        };
+
+        // Data Mock Pengajar
+        let mockTeachers = [
+            { id: 101, name: 'Ustadz Ali', email: 'ustadz.ali@sianuha.com', password: 'pengajar', subject: 'Fikih & Tahfidz', role: 'pengajar' },
+            { id: 102, name: 'Ustadzah Siti', email: 'ustadzah.siti@sianuha.com', password: 'pengajar', subject: 'Akhlak & Tajwid', role: 'pengajar' },
+        ];
+        
+        // Mock Data Pengajuan Surat untuk Admin dan Pengajar
+        let mockSubmissions = [
+            { id: 1, date: '01/10/2024', user: 'Ustadzah Siti', type: 'Izin Cuti', subject: 'Libur nikahan adik', status: 'Menunggu', fileLink: null, reason: 'Membutuhkan waktu 3 hari untuk perjalanan dan acara pernikahan adik di luar kota.' },
+            { id: 2, date: '25/09/2024', user: 'Ustadz Budi', type: 'Keterangan Mengajar', subject: 'Syarat Beasiswa LPDP', status: 'Disetujui', fileLink: 'https://drive.google.com/dokumen-resmi-2.pdf', reason: 'Diperlukan sebagai lampiran pendaftaran beasiswa studi lanjut.' },
+            { id: 3, date: '10/09/2024', user: 'Ustadzah Siti', type: 'Peminjaman', subject: 'Proyektor Madin', status: 'Ditolak', fileLink: null, reason: 'Diajukan mendadak dan proyektor sedang digunakan.' },
+            { id: 4, date: '05/10/2024', user: 'Ustadz Ali', type: 'Izin Cuti', subject: 'Sakit mendadak', status: 'Menunggu', fileLink: null, reason: 'Kondisi kesehatan menurun dan perlu istirahat total selama 2 hari.' },
+        ];
+        
+        let currentSubmissions = [...mockSubmissions]; // Copy untuk dimodifikasi
+
+        // --- Helper Fungsi ---
+
+        // Fungsi untuk menavigasi ke halaman tertentu
+        function navigate(newView, role = pageState.userRole, name = pageState.userName, subView = 'list', submissionId = null) {
+            pageState.view = newView;
+            pageState.userRole = role;
+            pageState.userName = name;
+            pageState.subView = subView;
+            pageState.submissionDetail = submissionId ? currentSubmissions.find(s => s.id === submissionId) : null;
+            
+            // Reset state spesifik saat berpindah view utama
+            if (newView !== 'akun_admin') {
+                pageState.userManagementAction = 'list';
+                pageState.userToEdit = null;
+            }
+            render();
+            window.scrollTo(0, 0); // Gulir ke atas saat navigasi
+        }
+
+        // Fungsi Simulasi Otentikasi
+        function handleLogin(event) {
+            event.preventDefault();
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const user = userCredentials[email];
+            
+            if (user && user.password === password) {
+                alertMessage(`Selamat datang, ${user.name}!`, 'success');
+                navigate(user.role === 'admin' ? 'admin_dashboard' : 'pengajar_dashboard', user.role, user.name);
+            } else {
+                alertMessage('Email atau Password salah. Coba: admin@sianuha.com (admin) atau ustadz.ali@sianuha.com (pengajar)', 'error');
+            }
+        }
+        
+        // --- Custom Confirmation Modal Logic (Mengganti window.confirm) ---
+        let modalCallback = null;
+
+        function showConfirmation(message, title, onConfirm, confirmText = 'Ya, Lanjutkan', confirmColor = 'bg-red-500') {
+            modalCallback = onConfirm;
+            document.getElementById('modal-title').innerText = title;
+            document.getElementById('modal-message').innerText = message;
+            const confirmBtn = document.getElementById('modal-confirm-btn');
+            confirmBtn.innerText = confirmText;
+            // Reset color class for confirm button
+            confirmBtn.className = confirmBtn.className.replace(/bg-[\w-]+-\d+/, '').replace(/hover:bg-[\w-]+-\d+/, '');
+            confirmBtn.classList.add(confirmColor, `hover:${confirmColor.replace('500', '600')}`, 'px-4', 'py-2', 'text-white', 'rounded-lg', 'transition', 'font-semibold');
+            
+            document.getElementById('custom-modal').classList.remove('hidden');
+            document.getElementById('custom-modal').classList.add('flex');
+        }
+
+        function closeConfirmation() {
+            document.getElementById('custom-modal').classList.add('hidden');
+            document.getElementById('custom-modal').classList.remove('flex');
+            modalCallback = null;
+        }
+
+        function handleConfirm() {
+            if (modalCallback) {
+                modalCallback(true);
+            }
+            closeConfirmation();
+        }
+        // --- End Custom Modal Logic ---
+        
+        // --- Custom Link Input Modal Logic ---
+        let linkInputCallback = null;
+
+        function showLinkInputModal(id, onConfirm) {
+            linkInputCallback = onConfirm;
+            // Set link modal title and ID
+            document.getElementById('link-modal-title').innerText = `Lampirkan Tautan Dokumen ID #${id}`;
+            document.getElementById('link-input-submission-id').value = id;
+            document.getElementById('link-input-field').value = ''; // Clear previous input
+
+            // Show the modal
+            document.getElementById('link-input-modal').classList.remove('hidden');
+            document.getElementById('link-input-modal').classList.add('flex');
+        }
+
+        function closeLinkInputModal() {
+            document.getElementById('link-input-modal').classList.add('hidden');
+            document.getElementById('link-input-modal').classList.remove('flex');
+            linkInputCallback = null;
+        }
+
+        function handleLinkInputConfirm() {
+            const link = document.getElementById('link-input-field').value.trim();
+            if (!link) {
+                alertMessage('Tautan dokumen wajib diisi.', 'error');
+                return;
+            }
+            
+            if (linkInputCallback) {
+                // Pass the link back to the function that called the modal (triggerApprovalFlow)
+                linkInputCallback(link);
+            }
+            closeLinkInputModal();
+        }
+        
+        // Function to initiate the approval flow which first asks for the link
+        function triggerApprovalFlow(id) {
+            showLinkInputModal(id, (link) => {
+                // Once the link is provided, proceed with confirmation and status update
+                updateSubmissionStatus(id, 'Disetujui', link);
+            });
+        }
+        // --- END: Custom Link Input Modal Logic ---
+
+
+        // Fungsi Alert Kustom (pengganti alert() - Sesuai Mandat)
+        function alertMessage(message, type = 'info') {
+            const container = document.getElementById('message-container');
+            if (!container) return;
+
+            const color = type === 'success' ? 'bg-majlis-green' : type === 'error' ? 'bg-red-500' : 'bg-blue-500';
+            const alertHtml = `
+                <div class="p-3 mb-4 rounded-lg text-white ${color} shadow-lg transition duration-300" role="alert">
+                    ${message}
+                </div>
+            `;
+            container.innerHTML = alertHtml;
+            setTimeout(() => { container.innerHTML = ''; }, 6000);
+        }
+
+        // Fungsi Simulasi Aksi Admin pada Surat
+        function updateSubmissionStatus(id, newStatus, link = null) {
+            const index = currentSubmissions.findIndex(sub => sub.id === id);
+            if (index !== -1) {
+                
+                const confirmationMessage = newStatus === 'Disetujui' 
+                    ? `Apakah Anda yakin ingin **menyetujui** pengajuan surat ID ${id}? Tautan akan disimpan.` 
+                    : `Apakah Anda yakin ingin **menolak** pengajuan surat ID ${id}?`;
+                
+                showConfirmation(
+                    confirmationMessage,
+                    'Konfirmasi Persetujuan Surat',
+                    (confirmed) => {
+                        if (confirmed) {
+                            currentSubmissions[index].status = newStatus;
+                            // Only update fileLink if status is approved AND link is provided.
+                            if (newStatus === 'Disetujui' && link) {
+                                currentSubmissions[index].fileLink = link;
+                            } else if (newStatus !== 'Disetujui') {
+                                // If rejected, remove any existing link
+                                currentSubmissions[index].fileLink = null;
+                            }
+                            alertMessage(`Pengajuan ID ${id} berhasil diubah status menjadi: ${newStatus}`, 'success');
+                            // Navigate back to detail view with updated status
+                            if (pageState.view === 'surat_admin' && pageState.subView === 'detail') {
+                                // Must navigate again to re-read the updated submission detail
+                                navigate('surat_admin', pageState.userRole, pageState.userName, 'detail', id);
+                            } else {
+                                navigate('surat_admin', pageState.userRole, pageState.userName, 'list'); 
+                            }
+                        }
+                    },
+                    newStatus === 'Disetujui' ? 'Setujui' : 'Tolak',
+                    newStatus === 'Disetujui' ? 'bg-majlis-green' : 'bg-red-500'
+                );
+            }
+        }
+        
+        // Fungsi Penambahan Surat Baru (Pengajar)
+        function handleNewSubmission(event) {
+            event.preventDefault();
+            const form = event.target;
+            const type = form.elements['submissionType'].value;
+            const subject = form.elements['submissionSubject'].value.trim();
+            const reason = form.elements['submissionReason'].value.trim();
+            
+            if (!type || !subject || !reason) {
+                alertMessage('Semua kolom wajib diisi.', 'error');
+                return;
+            }
+
+            const newSub = {
+                id: nextSubmissionId++,
+                date: new Date().toLocaleDateString('id-ID', {day: '2-digit', month: '2-digit', year: 'numeric'}),
+                user: pageState.userName,
+                type: type,
+                subject: subject,
+                status: 'Menunggu',
+                fileLink: null,
+                reason: reason
+            };
+            
+            currentSubmissions.push(newSub);
+            alertMessage('Pengajuan surat berhasil dikirim! Menunggu persetujuan admin.', 'success');
+            navigate('surat_pengajar', pageState.userRole, pageState.userName, 'list');
+        }
+
+        // --- Fungsi CRUD Pengajar (Admin) ---
+
+        function setManagementAction(action, teacherId = null) {
+            pageState.userManagementAction = action;
+            pageState.userToEdit = teacherId ? mockTeachers.find(t => t.id === teacherId) : null;
+            render(); // Re-render the akun_admin view
+        }
+
+        function handleTeacherFormSubmit(event) {
+            event.preventDefault();
+            const form = event.target;
+            const id = form.dataset.id ? parseInt(form.dataset.id) : null;
+            const name = form.elements['teacherName'].value.trim();
+            const email = form.elements['teacherEmail'].value.trim();
+            const password = form.elements['teacherPassword'].value.trim();
+            const subject = form.elements['teacherSubject'].value.trim();
+            
+            if (!name || !email || !password) {
+                alertMessage('Nama, Email, dan Password wajib diisi.', 'error');
+                return;
+            }
+
+            if (id) {
+                // Edit existing teacher
+                const index = mockTeachers.findIndex(t => t.id === id);
+                if (index !== -1) {
+                    mockTeachers[index] = { ...mockTeachers[index], name, email, password, subject };
+                    alertMessage(`Data pengajar ${name} berhasil diubah.`, 'success');
+                }
+            } else {
+                // Add new teacher
+                const newTeacher = { 
+                    id: nextTeacherId++, 
+                    name, 
+                    email, 
+                    password, 
+                    subject, 
+                    role: 'pengajar' 
+                };
+                mockTeachers.push(newTeacher);
+                alertMessage(`Pengajar ${name} berhasil ditambahkan.`, 'success');
+            }
+
+            // Update userCredentials mock data
+            updateCredentialsMock();
+            setManagementAction('list');
+        }
+
+        function deleteTeacher(teacherId, teacherName) {
+            showConfirmation(
+                `Apakah Anda yakin ingin menghapus akun pengajar ${teacherName}? Tindakan ini tidak dapat dibatalkan.`,
+                'Konfirmasi Penghapusan Akun',
+                (confirmed) => {
+                    if (confirmed) {
+                        mockTeachers = mockTeachers.filter(t => t.id !== teacherId);
+                        alertMessage(`Akun pengajar ${teacherName} berhasil dihapus.`, 'success');
+                        updateCredentialsMock();
+                        setManagementAction('list'); // Re-render the list
+                    }
+                }
+            );
+        }
+        
+        function updateCredentialsMock() {
+            // Hapus semua pengajar lama dari userCredentials
+            Object.keys(userCredentials).forEach(key => {
+                if (userCredentials[key] && userCredentials[key].role === 'pengajar') {
+                    delete userCredentials[key];
+                }
+            });
+            // Tambahkan semua pengajar yang baru/terbaru
+            mockTeachers.forEach(t => {
+                userCredentials[t.email] = { password: t.password, role: t.role, name: t.name };
+            });
+        }
+        
+        // Helper untuk badge status
+        function getStatusBadge(status) {
+            let colorClass;
+            if (status === 'Menunggu') {
+                colorClass = 'bg-yellow-100 text-yellow-800';
+            } else if (status === 'Disetujui') {
+                colorClass = 'bg-majlis-light text-majlis-green';
+            } else {
+                colorClass = 'bg-red-100 text-red-800';
+            }
+            return `<span class="px-3 py-1 text-xs font-semibold rounded-full ${colorClass}">${status}</span>`;
+        }
+
+        // --- Komponen Layout ---
+
+        // Komponen Login
+        function renderLogin() {
+            return `
+                <div class="flex items-center justify-center min-h-screen p-4 bg-gray-100">
+                    <div class="w-full max-w-md bg-white p-8 rounded-xl shadow-2xl border border-gray-100 transition duration-300 hover:shadow-3xl">
+                        <div id="message-container"></div>
+                        <div class="text-center mb-6">
+                            <div class="flex justify-center mb-4">
+  <img 
+    src="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgZkpIHzK-ByN2hri7IYFzKLDhYhyHJn35ypeaVhuMTKpLnqZsWnWhufZXXEkOVdh4toTceaKVrm9aZg7mvop4zepO-MUD7PJQRV55BNyjA0hnjPXnuTEWOq9vV8qyPMuobqqPRXGm-taO3z4SVzVzMv4LzK-_aAvv-u85245QV_3vN3Cv7sQEslQAg/s1078/Logo%20NH.png" 
+    alt="Logo Majelis Nurul Hikmah"
+    class="w-28 h-28 object-contain rounded-full shadow-md"
+  />
+</div> 
+                            <h1 class="text-3xl font-bold text-gray-800">SIANUHA</h1>
+                            <p class="text-majlis-green mt-1 text-lg font-medium">Sistem Akademik Majelis Nurul Hikmah</p>
+                            <p class="text-gray-500 mt-4">Silakan masuk untuk melanjutkan.</p>
+                        </div>
+                        <form id="login-form">
+                            <div class="mb-4">
+                                <label for="email" class="block text-sm font-medium text-gray-700 mb-1">Email/Username</label>
+                                <input type="email" id="email" name="email" value="ustadz.ali@sianuha.com" required 
+                                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-majlis-green focus:border-majlis-green transition duration-150" placeholder="ustadz.ali@sianuha.com">
+                            </div>
+                            <div class="mb-6">
+                                <label for="password" class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                                <input type="password" id="password" name="password" value="pengajar" required 
+                                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-majlis-green focus:border-majlis-green transition duration-150" placeholder="••••••••">
+                            </div>
+                            <button type="submit" class="w-full bg-majlis-green text-white py-2.5 rounded-lg font-semibold hover:bg-emerald-600 transition duration-300 shadow-md hover:shadow-lg">
+                                Masuk
+                            </button>
+                        </form>
+                        <p class="text-center text-xs text-gray-500 mt-6">Sistem Informasi Akademik Majelis Nurul Hikmah | Copyright 2025 © SIANUHA Majelis Nurul Hikmah, All Right Reseved.</p>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Komponen Sidebar Navigasi
+        function renderSidebar(role) {
+            const isAdmin = role === 'admin';
+            const menuItems = isAdmin ? [
+                { id: 'admin_dashboard', icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h5V4H4zm11 15v-5h5v5h-5zm0-10H4v5h15V9z"></path>', name: 'Dasbor Admin' },
+                { id: 'surat_admin', icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-3-3v6m-4-3a2 2 0 00-2 2v4a2 2 0 002 2h8a2 2 0 002-2v-4a2 2 0 00-2-2h-8z"></path>', name: 'Manajemen Surat' },
+                { id: 'raport_admin', icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-4h6v4m-3-4V7M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>', name: 'Laporan Hasil Belajar' },
+                { id: 'publikasi_admin', icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L15 16m-2-4l4.586-4.586a2 2 0 012.828 0L21 12m-6 6h6"></path>', name: 'Publikasi Karya Web' },
+                { id: 'akun_admin', icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h-2v-2a4 4 0 00-4-4H9a4 4 0 00-4 4v2H3m14-2a4 4 0 10-8 0"></path>', name: 'Manajemen Pengguna' }
+            ] : [
+                { id: 'pengajar_dashboard', icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h5V4H4zm11 15v-5h5v5h-5zm0-10H4v5h15V9z"></path>', name: 'Dasbor Pengajar' },
+                { id: 'surat_pengajar', icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-3-3v6m-4-3a2 2 0 00-2 2v4a2 2 0 002 2h8a2 2 0 002-2v-4a2 2 0 00-2-2h-8z"></path>', name: 'Pengajuan Surat' },
+                { id: 'raport_pengajar', icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-4h6v4m-3-4V7M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>', name: 'Laporan Hasil Belajar' },
+                { id: 'publikasi_pengajar', icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L15 16m-2-4l4.586-4.586a2 2 0 012.828 0L21 12m-6 6h6"></path>', name: 'Publikasi Karya' },
+                { id: 'profile_pengajar', icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"></path>', name: 'Profil Saya' }
+            ];
+
+            // Filter for mobile bottom navigation
+            const mobileMenuItems = menuItems.filter(item => item.id.includes('dashboard') || item.id === 'surat_pengajar' || item.id === 'raport_pengajar' || item.id === 'surat_admin' || item.id === 'raport_admin');
+
+            return `
+                <!-- Sidebar (Desktop) -->
+                <div class="h-full w-64 bg-white shadow-xl hidden md:block border-r border-gray-200 fixed top-0 left-0">
+                    <div class="p-6">
+                        <h2 class="text-2xl font-bold text-majlis-green">SIANUHA</h2>
+                        <p class="text-xs text-gray-500 mt-1">Menu ${isAdmin ? 'Admin' : 'Pengajar'} | ${pageState.userName}</p>
+                    </div>
+                    <nav class="mt-6">
+                        ${menuItems.map(item => `
+                            <button onclick="navigate('${item.id}')" 
+                                class="w-full text-left flex items-center px-6 py-3 transition duration-200 
+                                ${pageState.view === item.id ? 'bg-majlis-light text-majlis-green border-l-4 border-majlis-green font-semibold' : 'text-gray-600 hover:bg-gray-100 hover:text-majlis-green'}"
+                            >
+                                <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">${item.icon}</svg>
+                                ${item.name}
+                            </button>
+                        `).join('')}
+                    </nav>
+                </div>
+
+                <!-- Bottom Navigation (Mobile) -->
+                <nav class="fixed bottom-0 left-0 z-20 w-full md:hidden bg-white border-t border-gray-200 shadow-xl">
+                    <div class="flex justify-around h-16">
+                        ${mobileMenuItems.map(item => `
+                            <button onclick="navigate('${item.id}')" 
+                                class="flex flex-col items-center justify-center p-2 text-xs w-1/5
+                                ${pageState.view === item.id ? 'text-majlis-green font-semibold' : 'text-gray-500 hover:text-majlis-green'}"
+                            >
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">${item.icon}</svg>
+                                ${item.name.replace(' Admin', '').replace(' Pengajar', '').replace('Laporan Hasil Belajar', 'Raport').replace('Manajemen Surat', 'Surat')}
+                            </button>
+                        `).join('')}
+                        <button onclick="navigate('login', null)" class="flex flex-col items-center justify-center p-2 text-xs w-1/5 text-red-500 hover:text-red-700">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                            Logout
+                        </button>
+                    </div>
+                </nav>
+            `;
+        }
+        
+        // Komponen Header/Navbar Utama
+        function renderHeader(title, role) {
+            const dashboardLink = role === 'admin' ? 'admin_dashboard' : 'pengajar_dashboard';
+            return `
+                <header class="bg-white shadow-md p-4 flex justify-between items-center sticky top-0 z-10">
+                    <h1 class="text-xl font-bold text-gray-800">${title}</h1>
+                    <button onclick="navigate('login', null)" class="md:inline-flex items-center text-red-500 hover:text-red-700 transition ml-4 hidden">
+                        <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                        Logout
+                    </button>
+                </header>
+            `;
+        }
+
+        // --- Render Halaman Dasbor Admin ---
+        function renderAdminDashboard() {
+            // Jumlah akun pengajar diambil dari mockTeachers
+            const teacherCount = mockTeachers.length; 
+            const waitingSubmissions = currentSubmissions.filter(s => s.status === 'Menunggu').length;
+            
+            return `
+                <div class="md:ml-64 pb-20 md:pb-0">
+                    ${renderSidebar('admin')}
+                    <main class="flex-1 overflow-y-auto p-4 md:p-8">
+                        ${renderHeader('Dasbor Admin', 'admin')}
+                        <div id="message-container" class="mt-4"></div>
+                        <h2 class="text-2xl font-semibold text-gray-800 mt-4 mb-6">Ringkasan Sistem</h2>
+                        
+                        <!-- Cards Ringkasan -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                            <div onclick="navigate('surat_admin')" class="cursor-pointer bg-white p-5 rounded-xl shadow-lg border-b-4 border-majlis-green hover:shadow-xl transition">
+                                <p class="text-sm text-gray-500">Pengajuan Surat Menunggu</p>
+                                <p class="text-3xl font-bold text-gray-900 mt-1">${waitingSubmissions}</p>
+                            </div>
+                            <div onclick="navigate('raport_admin')" class="cursor-pointer bg-white p-5 rounded-xl shadow-lg border-b-4 border-blue-500 hover:shadow-xl transition">
+                                <p class="text-sm text-gray-500">Santri Aktif</p>
+                                <p class="text-3xl font-bold text-gray-900 mt-1">210</p>
+                            </div>
+                            <div onclick="navigate('publikasi_admin')" class="cursor-pointer bg-white p-5 rounded-xl shadow-lg border-b-4 border-yellow-500 hover:shadow-xl transition">
+                                <p class="text-sm text-gray-500">Karya Perlu Review</p>
+                                <p class="text-3xl font-bold text-gray-900 mt-1">8</p>
+                            </div>
+                            <div onclick="navigate('akun_admin')" class="cursor-pointer bg-white p-5 rounded-xl shadow-lg border-b-4 border-pink-500 hover:shadow-xl transition">
+                                <p class="text-sm text-gray-500">Akun Pengajar</p>
+                                <p class="text-3xl font-bold text-gray-900 mt-1">${teacherCount}</p>
+                            </div>
+                        </div>
+
+                        <!-- Quick Actions (DIPERBAIKI) -->
+                        <h3 class="text-xl font-semibold text-gray-800 mb-4">Aksi Cepat</h3>
+                        <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                            <!-- Tombol 1: Manajemen Surat -->
+                            <div onclick="navigate('surat_admin')" class="quick-action-card bg-majlis-green text-white shadow-xl hover:shadow-2xl hover:bg-emerald-600 transition">
+                                <svg class="w-10 h-10 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-3-3v6m-4-3a2 2 0 00-2 2v4a2 2 0 002 2h8a2 2 0 002-2v-4a2 2 0 00-2-2h-8z"></path></svg>
+                                <span class="font-bold text-lg">Manajemen Surat</span>
+                                <span class="text-xs opacity-80 mt-1">Review pengajuan pengajar.</span>
+                            </div>
+                            <!-- Tombol 2: Laporan Hasil Belajar -->
+                            <div onclick="navigate('raport_admin')" class="quick-action-card bg-blue-500 text-white shadow-xl hover:shadow-2xl hover:bg-blue-600 transition">
+                                <svg class="w-10 h-10 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-4h6v4m-3-4V7M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+                                <span class="font-bold text-lg">Kelola Raport</span>
+                                <span class="text-xs opacity-80 mt-1">Cetak dan verifikasi nilai santri.</span>
+                            </div>
+                            <!-- Tombol 3: Manajemen Pengguna -->
+                            <div onclick="navigate('akun_admin')" class="quick-action-card bg-purple-600 text-white shadow-xl hover:shadow-2xl hover:bg-purple-700 transition">
+                                <svg class="w-10 h-10 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h-2v-2a4 4 0 00-4-4H9a4 4 0 00-4 4v2H3m14-2a4 4 0 10-8 0"></path></svg>
+                                <span class="font-bold text-lg">Manajemen Pengguna</span>
+                                <span class="text-xs opacity-80 mt-1">Tambah/Edit akun pengajar.</span>
+                            </div>
+                            <!-- Tombol 4: Publikasi Karya (Opsional, untuk mengisi slot 4) -->
+                             <div onclick="navigate('publikasi_admin')" class="quick-action-card bg-yellow-500 text-white shadow-xl hover:shadow-2xl hover:bg-yellow-600 transition">
+                                <svg class="w-10 h-10 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L15 16m-2-4l4.586-4.586a2 2 0 012.828 0L21 12m-6 6h6"></path></svg>
+                                <span class="font-bold text-lg">Review Publikasi</span>
+                                <span class="text-xs opacity-80 mt-1">Karya santri yang siap terbit.</span>
+                            </div>
+                        </div>
+
+                        <!-- Informasi Akses Demo -->
+                        <h3 class="text-xl font-semibold text-gray-800 mb-4 mt-8">Informasi Akses Demo</h3>
+                        <div class="bg-gray-100 p-6 rounded-xl shadow-inner border border-gray-200">
+                            <p class="text-sm text-gray-600 mb-4 italic">Informasi ini hanya tampil di mode prototipe untuk memudahkan pengujian. Data Pengajar di bawah ini diambil langsung dari tabel Manajemen Pengguna.</p>
+                            ${Object.keys(userCredentials).map(email => {
+                                const user = userCredentials[email];
+                                const borderColor = user.role === 'admin' ? 'border-red-500' : 'border-majlis-green';
+                                return `
+                                    <div class="p-4 bg-white rounded-lg shadow-sm mb-3 border-l-4 ${borderColor}">
+                                        <p class="font-bold text-lg">${user.name} 
+                                            <span class="text-xs font-medium px-2 py-0.5 rounded-full ${user.role === 'admin' ? 'bg-red-100 text-red-700' : 'bg-majlis-light text-majlis-green'}">${user.role.toUpperCase()}</span>
+                                        </p>
+                                        <p class="text-sm text-gray-700 mt-1">Email/Username: <code class="font-mono bg-gray-100 px-2 py-0.5 rounded">${email}</code></p>
+                                        <p class="text-sm text-gray-700">Password: <code class="font-mono bg-gray-100 px-2 py-0.5 rounded">${user.password}</code></p>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </main>
+                </div>
+            `;
+        }
+        
+        // --- Render Halaman Dasbor Pengajar ---
+        function renderPengajarDashboard() {
+            // Cek status surat untuk pengguna yang login (Ustadz Ali)
+            const mySubmission = currentSubmissions.find(s => s.user === pageState.userName && s.status === 'Menunggu');
+            const mySubmissionStatus = mySubmission ? 
+                `<span class="text-yellow-600 font-medium">Menunggu Persetujuan</span> <a href="#" onclick="navigate('surat_pengajar')" class="text-gray-500 text-xs ml-2 hover:underline">(Lihat Detail)</a>` 
+                : '<span class="text-majlis-green font-medium">Tidak ada pengajuan surat mendesak.</span>';
+
+            return `
+                <div class="md:ml-64 pb-20 md:pb-0">
+                    ${renderSidebar('pengajar')}
+                    <main class="flex-1 overflow-y-auto p-4 md:p-8">
+                        ${renderHeader('Dasbor Pengajar', 'pengajar')}
+                        <div id="message-container" class="mt-4"></div>
+                        <h2 class="text-2xl font-semibold text-gray-800 mt-4 mb-6">Informasi dan Tugas Saya</h2>
+
+                        <!-- Tugas Utama Card (Task List) -->
+                        <div class="bg-white p-6 rounded-xl shadow-xl mb-8">
+                            <h3 class="text-xl font-bold text-majlis-green mb-3">Selamat Datang, ${pageState.userName}!</h3>
+                            
+                            <p class="font-semibold text-red-500">Tugas Mendesak:</p>
+                            <ul class="list-disc list-inside text-gray-700 ml-4 space-y-2">
+                                <li class="text-sm">Input Nilai Raport Madin Ula-1 (Deadline: 15 Okt) <a href="#" onclick="navigate('raport_pengajar')" class="text-blue-500 font-medium hover:underline">Input Sekarang</a></li>
+                                <li class="text-sm">Status Pengajuan Anda: ${mySubmissionStatus}</li>
+                            </ul>
+                        </div>
+                        
+                        <!-- Quick Access (DIPERBAIKI) -->
+                        <h3 class="text-xl font-semibold text-gray-800 mb-4 mt-8">Akses Cepat</h3>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <!-- Tombol 1: Ajukan Surat Baru -->
+                            <div onclick="navigate('surat_pengajar', null, null, 'add')" class="quick-action-card bg-majlis-green text-white shadow-xl hover:shadow-2xl hover:bg-emerald-600 transition">
+                                <svg class="w-10 h-10 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                                <span class="font-bold text-lg">Ajukan Surat</span>
+                                <span class="text-xs opacity-80 mt-1">Izin, cuti, peminjaman.</span>
+                            </div>
+                            <!-- Tombol 2: Input Nilai -->
+                            <div onclick="navigate('raport_pengajar')" class="quick-action-card bg-blue-500 text-white shadow-xl hover:shadow-2xl hover:bg-blue-600 transition">
+                                <svg class="w-10 h-10 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-4h6v4m-3-4V7M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+                                <span class="font-bold text-lg">Input Nilai</span>
+                                <span class="text-xs opacity-80 mt-1">Laporan Hasil Belajar.</span>
+                            </div>
+                            <!-- Tombol 3: Publikasi Karya -->
+                            <div onclick="navigate('publikasi_pengajar')" class="quick-action-card bg-yellow-600 text-white shadow-xl hover:shadow-2xl hover:bg-yellow-700 transition">
+                                <svg class="w-10 h-10 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L15 16m-2-4l4.586-4.586a2 2 0 012.828 0L21 12m-6 6h6"></path></svg>
+                                <span class="font-bold text-lg">Publikasi Karya</span>
+                                <span class="text-xs opacity-80 mt-1">Ajukan karya santri.</span>
+                            </div>
+                            <!-- Tombol 4: Profil Saya -->
+                            <div onclick="navigate('profile_pengajar')" class="quick-action-card bg-purple-500 text-white shadow-xl hover:shadow-2xl hover:bg-purple-600 transition">
+                                <svg class="w-10 h-10 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"></path></svg>
+                                <span class="font-bold text-lg">Profil Saya</span>
+                                <span class="text-xs opacity-80 mt-1">Lihat detail akun Anda.</span>
+                            </div>
+                        </div>
+
+                        <!-- Calendar / Notifications Placeholder -->
+                        <div class="mt-8 bg-gray-100 p-6 rounded-xl shadow-inner border border-gray-200">
+                            <h3 class="text-lg font-semibold text-gray-700 mb-2">Pemberitahuan & Kalender Akademik</h3>
+                            <p class="text-sm text-gray-500">Saat ini adalah minggu ujian tengah semester. Mohon persiapkan materi dengan baik.</p>
+                        </div>
+                    </main>
+                </div>
+            `;
+        }
+        
+        // --- ADMIN VIEWS IMPLEMENTATION ---
+        
+        // Admin Surat Detail (pageState.subView = 'detail')
+        function renderSuratAdminDetail(submission) {
+            if (!submission) return `<p class="p-8 text-center text-gray-500">Detail pengajuan tidak ditemukan.</p>`;
+
+            const isPending = submission.status === 'Menunggu';
+
+            return `
+                <div class="bg-white p-6 rounded-xl shadow-lg">
+                    <h3 class="text-2xl font-bold text-gray-800 mb-4 border-b pb-2">Detail Pengajuan Surat ID #${submission.id}</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-8 text-gray-700">
+                        <div>
+                            <p class="text-sm font-medium text-gray-500">Pemohon</p>
+                            <p class="text-lg font-semibold">${submission.user}</p>
+                        </div>
+                        <div>
+                            <p class="text-sm font-medium text-gray-500">Tanggal Pengajuan</p>
+                            <p class="text-lg">${submission.date}</p>
+                        </div>
+                        <div>
+                            <p class="text-sm font-medium text-gray-500">Jenis Surat</p>
+                            <p class="text-lg">${submission.type}</p>
+                        </div>
+                        <div>
+                            <p class="text-sm font-medium text-gray-500">Status</p>
+                            <p class="text-lg">${getStatusBadge(submission.status)}</p>
+                        </div>
+                    </div>
+                    <div class="mt-4">
+                        <p class="text-sm font-medium text-gray-500">Perihal/Subjek</p>
+                        <p class="text-lg font-medium bg-gray-50 p-3 rounded-lg border">${submission.subject}</p>
+                    </div>
+                    <div class="mt-4">
+                        <p class="text-sm font-medium text-gray-500">Alasan/Keterangan Detail</p>
+                        <p class="text-lg leading-relaxed bg-gray-50 p-3 rounded-lg border min-h-[100px]">${submission.reason}</p>
+                    </div>
+                    
+                    ${submission.fileLink ? `
+                        <div class="mt-6 p-4 bg-majlis-light rounded-lg border border-majlis-green">
+                            <p class="text-sm font-medium text-majlis-green mb-2">Tautan Dokumen Hasil (Google Drive/File):</p>
+                            <a href="${submission.fileLink}" target="_blank" class="text-blue-600 hover:text-blue-800 break-all underline transition">
+                                ${submission.fileLink}
+                            </a>
+                            <!-- Tambahan: Opsi untuk mengganti tautan di sini jika diperlukan -->
+                        </div>
+                    ` : ''}
+
+                    <!-- Aksi Admin -->
+                    <div class="mt-8 pt-4 border-t ${isPending ? 'border-gray-200' : 'border-dashed border-gray-300'}">
+                        <p class="text-lg font-semibold text-gray-700 mb-3">Aksi Admin:</p>
+                        <div class="flex space-x-3">
+                            ${isPending ? `
+                                <!-- Menggunakan triggerApprovalFlow untuk memunculkan modal input link terlebih dahulu -->
+                                <button onclick="triggerApprovalFlow(${submission.id})" class="flex-1 px-4 py-2 bg-majlis-green text-white rounded-lg hover:bg-emerald-600 transition font-semibold">
+                                    Setujui & Lampirkan File
+                                </button>
+                                <button onclick="updateSubmissionStatus(${submission.id}, 'Ditolak')" class="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition font-semibold">
+                                    Tolak Pengajuan
+                                </button>
+                            ` : `<p class="text-gray-500 italic">Pengajuan ini sudah selesai diproses.</p>`}
+                            
+                            <button onclick="navigate('surat_admin', null, null, 'list')" class="flex-1 md:flex-initial px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition font-semibold">
+                                Kembali ke Daftar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Admin Surat List (pageState.subView = 'list')
+        function renderSuratAdminList() {
+            const tableRows = currentSubmissions.sort((a, b) => b.id - a.id).map(sub => `
+                <tr class="border-b hover:bg-gray-50 transition cursor-pointer" onclick="navigate('surat_admin', null, null, 'detail', ${sub.id})">
+                    <td class="py-3 px-4 text-sm font-medium text-gray-900">#${sub.id}</td>
+                    <td class="py-3 px-4 text-sm text-gray-700">${sub.date}</td>
+                    <td class="py-3 px-4 text-sm text-gray-700">${sub.user}</td>
+                    <td class="py-3 px-4 text-sm text-gray-700">${sub.type}</td>
+                    <td class="py-3 px-4 text-sm text-gray-700 truncate max-w-xs">${sub.subject}</td>
+                    <td class="py-3 px-4 text-sm">${getStatusBadge(sub.status)}</td>
+                </tr>
+            `).join('');
+
+            return `
+                <div class="bg-white p-6 rounded-xl shadow-lg">
+                    <h3 class="text-2xl font-bold text-gray-800 mb-4">Daftar Pengajuan Surat (${currentSubmissions.length})</h3>
+                    <div class="overflow-x-auto rounded-lg border border-gray-200">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th scope="col" class="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                                    <th scope="col" class="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tanggal</th>
+                                    <th scope="col" class="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pemohon</th>
+                                    <th scope="col" class="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jenis</th>
+                                    <th scope="col" class="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subjek</th>
+                                    <th scope="col" class="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-200 bg-white">
+                                ${tableRows.length > 0 ? tableRows : `<tr><td colspan="6" class="text-center py-6 text-gray-500">Tidak ada pengajuan surat yang ditemukan.</td></tr>`}
+                            </tbody>
+                        </table>
+                    </div>
+                    <p class="text-sm text-gray-500 mt-4">Klik baris tabel untuk melihat detail pengajuan dan melakukan persetujuan.</p>
+                </div>
+            `;
+        }
+
+        function renderManajemenSuratAdmin() {
+            let content;
+            let title;
+            
+            if (pageState.subView === 'detail' && pageState.submissionDetail) {
+                content = renderSuratAdminDetail(pageState.submissionDetail);
+                title = `Detail Pengajuan #${pageState.submissionDetail.id}`;
+            } else {
+                content = renderSuratAdminList();
+                title = 'Manajemen Pengajuan Surat';
+            }
+
+            return `
+                <div class="md:ml-64 pb-20 md:pb-0">
+                    ${renderSidebar('admin')}
+                    <main class="flex-1 overflow-y-auto p-4 md:p-8">
+                        ${renderHeader(title, 'admin')}
+                        <div id="message-container" class="mt-4"></div>
+                        <div class="mt-4">
+                            ${content}
+                        </div>
+                    </main>
+                </div>
+            `;
+        }
+
+        // Admin Manajemen Pengguna (Pengajar)
+        // Function to render Add/Edit form for Teachers
+        function renderTeacherForm(teacher = null) {
+            const isEdit = !!teacher;
+            const title = isEdit ? `Edit Pengajar: ${teacher.name}` : 'Tambah Pengajar Baru';
+            const buttonText = isEdit ? 'Simpan Perubahan' : 'Tambahkan Pengajar';
+
+            return `
+                <div class="bg-white p-6 rounded-xl shadow-lg max-w-3xl mx-auto">
+                    <h3 class="text-2xl font-bold text-gray-800 mb-4 border-b pb-2">${title}</h3>
+                    <form data-id="${teacher ? teacher.id : ''}" onsubmit="handleTeacherFormSubmit(event)">
+                        <div class="space-y-4">
+                            <div>
+                                <label for="teacherName" class="block text-sm font-medium text-gray-700">Nama Lengkap</label>
+                                <input type="text" id="teacherName" name="teacherName" required
+                                       value="${teacher ? teacher.name : ''}"
+                                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-majlis-green focus:border-majlis-green">
+                            </div>
+                            <div>
+                                <label for="teacherEmail" class="block text-sm font-medium text-gray-700">Email (Digunakan untuk Login)</label>
+                                <input type="email" id="teacherEmail" name="teacherEmail" required
+                                       value="${teacher ? teacher.email : ''}"
+                                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-majlis-green focus:border-majlis-green">
+                            </div>
+                            <div>
+                                <label for="teacherPassword" class="block text-sm font-medium text-gray-700">Password (Default)</label>
+                                <input type="text" id="teacherPassword" name="teacherPassword" required
+                                       value="${teacher ? teacher.password : ''}"
+                                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-majlis-green focus:border-majlis-green">
+                                <p class="mt-1 text-xs text-gray-500">Mohon catat password ini, terutama untuk akun baru.</p>
+                            </div>
+                            <div>
+                                <label for="teacherSubject" class="block text-sm font-medium text-gray-700">Mata Pelajaran/Bidang Keahlian</label>
+                                <input type="text" id="teacherSubject" name="teacherSubject"
+                                       value="${teacher ? teacher.subject : ''}"
+                                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-majlis-green focus:border-majlis-green"
+                                       placeholder="Contoh: Fikih, Akhlak, Tahfidz">
+                            </div>
+                        </div>
+                        
+                        <div class="flex justify-end space-x-3 mt-6 pt-4 border-t">
+                            <button type="button" onclick="setManagementAction('list')" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition font-semibold">
+                                Batal
+                            </button>
+                            <button type="submit" class="px-4 py-2 bg-majlis-green text-white rounded-lg hover:bg-emerald-600 transition font-semibold">
+                                ${buttonText}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            `;
+        }
+
+
+        // Admin Teacher List (pageState.userManagementAction = 'list')
+        function renderTeacherList() {
+            const tableRows = mockTeachers.sort((a, b) => a.id - b.id).map(t => `
+                <tr class="border-b hover:bg-gray-50 transition">
+                    <td class="py-3 px-4 text-sm font-medium text-gray-900">#${t.id}</td>
+                    <td class="py-3 px-4 text-sm text-gray-700 font-semibold">${t.name}</td>
+                    <td class="py-3 px-4 text-sm text-gray-700">${t.email}</td>
+                    <td class="py-3 px-4 text-sm text-gray-700">${t.subject || '-'}</td>
+                    <td class="py-3 px-4 text-sm">
+                        <div class="flex space-x-2">
+                            <button onclick="setManagementAction('edit', ${t.id})" class="text-blue-500 hover:text-blue-700 p-1 rounded-full hover:bg-blue-100 transition">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-7-7l-4 4-2 2v-2l6-6-2-2m-2-2l2 2m-2 2l2 2m-2-2l2-2"></path></svg>
+                            </button>
+                            <button onclick="deleteTeacher(${t.id}, '${t.name}')" class="text-red-500 hover:text-red-700 p-1 rounded-full hover:bg-red-100 transition">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+
+            return `
+                <div class="bg-white p-6 rounded-xl shadow-lg">
+                    <div class="flex justify-between items-center mb-4 border-b pb-2">
+                        <h3 class="text-2xl font-bold text-gray-800">Daftar Pengajar (${mockTeachers.length})</h3>
+                        <button onclick="setManagementAction('add')" class="px-4 py-2 bg-majlis-green text-white rounded-lg hover:bg-emerald-600 transition font-semibold flex items-center">
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                            Tambah Baru
+                        </button>
+                    </div>
+                    
+                    <div class="overflow-x-auto rounded-lg border border-gray-200">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th scope="col" class="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                                    <th scope="col" class="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nama</th>
+                                    <th scope="col" class="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                                    <th scope="col" class="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bidang</th>
+                                    <th scope="col" class="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-200 bg-white">
+                                ${tableRows.length > 0 ? tableRows : `<tr><td colspan="5" class="text-center py-6 text-gray-500">Tidak ada data pengajar yang ditemukan.</td></tr>`}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
+
+        function renderManajemenPenggunaAdmin() {
+            let content;
+            let title = 'Manajemen Pengguna (Pengajar)';
+            
+            if (pageState.userManagementAction === 'add') {
+                content = renderTeacherForm();
+                title = 'Tambah Pengajar Baru';
+            } else if (pageState.userManagementAction === 'edit' && pageState.userToEdit) {
+                content = renderTeacherForm(pageState.userToEdit);
+                title = `Edit Pengajar: ${pageState.userToEdit.name}`;
+            } else {
+                content = renderTeacherList();
+            }
+
+            return `
+                <div class="md:ml-64 pb-20 md:pb-0">
+                    ${renderSidebar('admin')}
+                    <main class="flex-1 overflow-y-auto p-4 md:p-8">
+                        ${renderHeader(title, 'admin')}
+                        <div id="message-container" class="mt-4"></div>
+                        <div class="mt-4">
+                            ${content}
+                        </div>
+                    </main>
+                </div>
+            `;
+        }
+
+        // Placeholder for Raport Admin
+        function renderRaportAdmin() {
+            return `
+                <div class="md:ml-64 pb-20 md:pb-0">
+                    ${renderSidebar('admin')}
+                    <main class="flex-1 overflow-y-auto p-4 md:p-8">
+                        ${renderHeader('Laporan Hasil Belajar (Admin)', 'admin')}
+                        <div id="message-container" class="mt-4"></div>
+                        <div class="p-8 bg-white rounded-xl shadow-lg border-l-4 border-blue-500">
+                            <h2 class="text-2xl font-bold text-gray-800 mb-4">Pengelolaan Raport dan Santri</h2>
+                            <p class="text-gray-600">Halaman ini digunakan untuk mengelola data santri, mencetak raport akhir, dan melihat statistik nilai per angkatan.</p>
+                            <div class="mt-4 p-4 bg-blue-50 rounded-lg">
+                                <p class="font-medium text-blue-800">Status Pengembangan:</p>
+                                <p class="text-sm text-blue-700">Modul ini siap dikembangkan. Anda dapat menambahkan fungsionalitas CRUD Santri dan fitur cetak PDF di sini.</p>
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            `;
+        }
+
+        // Placeholder for Publikasi Admin
+        function renderPublikasiAdmin() {
+            return `
+                <div class="md:ml-64 pb-20 md:pb-0">
+                    ${renderSidebar('admin')}
+                    <main class="flex-1 overflow-y-auto p-4 md:p-8">
+                        ${renderHeader('Publikasi Karya Web (Admin)', 'admin')}
+                        <div id="message-container" class="mt-4"></div>
+                        <div class="p-8 bg-white rounded-xl shadow-lg border-l-4 border-yellow-500">
+                            <h2 class="text-2xl font-bold text-gray-800 mb-4">Review dan Penerbitan Karya</h2>
+                            <p class="text-gray-600">Halaman ini digunakan untuk meninjau karya-karya santri yang diajukan oleh pengajar sebelum dipublikasikan ke web Majelis Nurul Hikmah.</p>
+                            <div class="mt-4 p-4 bg-yellow-50 rounded-lg">
+                                <p class="font-medium text-yellow-800">Status Pengembangan:</p>
+                                <p class="text-sm text-yellow-700">Saat ini hanya placeholder. Fungsionalitas utama adalah menampilkan daftar review yang menunggu, menyetujui, atau menolak publikasi.</p>
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            `;
+        }
+
+        // --- PENGAJAR VIEWS IMPLEMENTATION ---
+
+        // Pengajar New Submission Form (pageState.subView = 'add')
+        function renderPengajarSuratForm() {
+            return `
+                <div class="bg-white p-6 rounded-xl shadow-lg max-w-3xl mx-auto">
+                    <div class="flex justify-between items-center mb-4 border-b pb-2">
+                        <h3 class="text-2xl font-bold text-gray-800">Ajukan Surat Baru</h3>
+                    </div>
+                    <form onsubmit="handleNewSubmission(event)">
+                        <div class="space-y-4">
+                            <div>
+                                <label for="submissionType" class="block text-sm font-medium text-gray-700">Jenis Surat yang Diajukan</label>
+                                <select id="submissionType" name="submissionType" required
+                                        class="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white focus:ring-majlis-green focus:border-majlis-green">
+                                    <option value="">-- Pilih Jenis Surat --</option>
+                                    <option value="Izin Cuti">Izin Cuti</option>
+                                    <option value="Keterangan Mengajar">Keterangan Mengajar/Bekerja</option>
+                                    <option value="Peminjaman">Peminjaman Aset Lembaga</option>
+                                    <option value="Lainnya">Lainnya (Jelaskan di Subjek)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="submissionSubject" class="block text-sm font-medium text-gray-700">Perihal/Subjek Singkat</label>
+                                <input type="text" id="submissionSubject" name="submissionSubject" required
+                                       placeholder="Contoh: Izin Cuti 3 Hari"
+                                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-majlis-green focus:border-majlis-green">
+                            </div>
+                            <div>
+                                <label for="submissionReason" class="block text-sm font-medium text-gray-700">Alasan/Keterangan Detail</label>
+                                <textarea id="submissionReason" name="submissionReason" rows="5" required
+                                          placeholder="Jelaskan secara detail alasan Anda mengajukan surat ini..."
+                                          class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-majlis-green focus:border-majlis-green"></textarea>
+                            </div>
+                        </div>
+                        
+                        <div class="flex justify-end space-x-3 mt-6 pt-4 border-t">
+                            <button type="button" onclick="navigate('surat_pengajar', null, null, 'list')" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition font-semibold">
+                                Kembali
+                            </button>
+                            <button type="submit" class="px-4 py-2 bg-majlis-green text-white rounded-lg hover:bg-emerald-600 transition font-semibold">
+                                Kirim Pengajuan
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            `;
+        }
+
+        // Pengajar Submission List (pageState.subView = 'list')
+        function renderPengajarSuratList() {
+            const userSubmissions = currentSubmissions.filter(s => s.user === pageState.userName).sort((a, b) => b.id - a.id);
+            
+            const tableRows = userSubmissions.map(sub => `
+                <tr class="border-b hover:bg-gray-50 transition">
+                    <td class="py-3 px-4 text-sm font-medium text-gray-900">#${sub.id}</td>
+                    <td class="py-3 px-4 text-sm text-gray-700">${sub.date}</td>
+                    <td class="py-3 px-4 text-sm text-gray-700">${sub.type}</td>
+                    <td class="py-3 px-4 text-sm text-gray-700 truncate max-w-xs">${sub.subject}</td>
+                    <td class="py-3 px-4 text-sm">
+                        ${getStatusBadge(sub.status)}
+                        ${sub.fileLink ? `<a href="${sub.fileLink}" target="_blank" class="text-majlis-green ml-2 hover:underline text-xs">(Lihat File)</a>` : ''}
+                    </td>
+                </tr>
+            `).join('');
+
+            return `
+                <div class="bg-white p-6 rounded-xl shadow-lg">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 border-b pb-2">
+                        <h3 class="text-2xl font-bold text-gray-800 mb-2 sm:mb-0">Riwayat Pengajuan Surat Saya (${userSubmissions.length})</h3>
+                        <button onclick="navigate('surat_pengajar', null, null, 'add')" class="px-4 py-2 bg-majlis-green text-white rounded-lg hover:bg-emerald-600 transition font-semibold flex items-center text-sm">
+                            <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                            Ajukan Baru
+                        </button>
+                    </div>
+
+                    <div class="overflow-x-auto rounded-lg border border-gray-200">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th scope="col" class="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                                    <th scope="col" class="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tanggal</th>
+                                    <th scope="col" class="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jenis</th>
+                                    <th scope="col" class="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subjek</th>
+                                    <th scope="col" class="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status & File</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-200 bg-white">
+                                ${tableRows.length > 0 ? tableRows : `<tr><td colspan="5" class="text-center py-6 text-gray-500">Anda belum memiliki riwayat pengajuan surat.</td></tr>`}
+                            </tbody>
+                        </table>
+                    </div>
+                    <p class="text-sm text-gray-500 mt-4">Status 'Menunggu' berarti pengajuan Anda sedang ditinjau oleh Admin.</p>
+                </div>
+            `;
+        }
+
+        function renderPengajuanSuratPengajar() {
+            let content;
+            let title = 'Pengajuan Surat Tugas & Izin';
+            
+            if (pageState.subView === 'add') {
+                content = renderPengajarSuratForm();
+                title = 'Formulir Pengajuan Surat';
+            } else {
+                content = renderPengajarSuratList();
+            }
+
+            return `
+                <div class="md:ml-64 pb-20 md:pb-0">
+                    ${renderSidebar('pengajar')}
+                    <main class="flex-1 overflow-y-auto p-4 md:p-8">
+                        ${renderHeader(title, 'pengajar')}
+                        <div id="message-container" class="mt-4"></div>
+                        <div class="mt-4">
+                            ${content}
+                        </div>
+                    </main>
+                </div>
+            `;
+        }
+
+        // Placeholder for Raport Pengajar
+        function renderRaportPengajar() {
+            return `
+                <div class="md:ml-64 pb-20 md:pb-0">
+                    ${renderSidebar('pengajar')}
+                    <main class="flex-1 overflow-y-auto p-4 md:p-8">
+                        ${renderHeader('Input Laporan Hasil Belajar', 'pengajar')}
+                        <div id="message-container" class="mt-4"></div>
+                        <div class="p-8 bg-white rounded-xl shadow-lg border-l-4 border-blue-500">
+                            <h2 class="text-2xl font-bold text-gray-800 mb-4">Input Nilai & Deskripsi Raport</h2>
+                            <p class="text-gray-600">Halaman ini adalah area bagi pengajar untuk memasukkan nilai, kehadiran, dan deskripsi perkembangan santri di bawah bimbingannya.</p>
+                            <div class="mt-4 p-4 bg-blue-50 rounded-lg">
+                                <p class="font-medium text-blue-800">Contoh Kelas yang Diajar:</p>
+                                <ul class="list-disc list-inside text-sm text-blue-700 ml-4">
+                                    <li>Kelas Madin Ulya-1 (Fikih) - Status: Belum Selesai</li>
+                                    <li>Kelas Tahfidz Juz 30 - Status: Selesai</li>
+                                </ul>
+                                <button class="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition font-semibold">Mulai Input Nilai</button>
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            `;
+        }
+
+        // Placeholder for Publikasi Pengajar
+        function renderPublikasiPengajar() {
+            return `
+                <div class="md:ml-64 pb-20 md:pb-0">
+                    ${renderSidebar('pengajar')}
+                    <main class="flex-1 overflow-y-auto p-4 md:p-8">
+                        ${renderHeader('Pengajuan Publikasi Karya Santri', 'pengajar')}
+                        <div id="message-container" class="mt-4"></div>
+                        <div class="p-8 bg-white rounded-xl shadow-lg border-l-4 border-yellow-500">
+                            <h2 class="text-2xl font-bold text-gray-800 mb-4">Ajukan Karya Terbaik</h2>
+                            <p class="text-gray-600">Gunakan halaman ini untuk mengunggah karya tulis, kaligrafi, atau proyek santri untuk ditinjau oleh admin dan dipublikasikan di website resmi.</p>
+                            <div class="mt-4 p-4 bg-yellow-50 rounded-lg">
+                                <p class="font-medium text-yellow-800">Status Pengembangan:</p>
+                                <p class="text-sm text-yellow-700">Modul ini akan memiliki formulir unggah file dan daftar riwayat pengajuan publikasi.</p>
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            `;
+        }
+
+        // Profile Pengajar
+        function renderProfilePengajar() {
+            const currentUserData = mockTeachers.find(t => t.name === pageState.userName);
+            const email = currentUserData ? currentUserData.email : 'N/A';
+            const subject = currentUserData ? currentUserData.subject : 'N/A';
+
+            return `
+                <div class="md:ml-64 pb-20 md:pb-0">
+                    ${renderSidebar('pengajar')}
+                    <main class="flex-1 overflow-y-auto p-4 md:p-8">
+                        ${renderHeader('Profil Saya', 'pengajar')}
+                        <div id="message-container" class="mt-4"></div>
+                        
+                        <div class="bg-white p-8 rounded-xl shadow-lg max-w-xl mx-auto">
+                            <div class="text-center mb-6">
+                                <div class="w-20 h-20 mx-auto rounded-full bg-majlis-light text-majlis-green flex items-center justify-center text-4xl font-bold mb-3">
+                                    ${pageState.userName.charAt(0)}
+                                </div>
+                                <h2 class="text-3xl font-bold text-gray-800">${pageState.userName}</h2>
+                                <p class="text-md text-gray-500">${email}</p>
+                            </div>
+                            
+                            <div class="space-y-4 border-t pt-4">
+                                <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                                    <span class="font-medium text-gray-600">Jabatan/Peran</span>
+                                    <span class="font-semibold text-majlis-green">Pengajar</span>
+                                </div>
+                                <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                                    <span class="font-medium text-gray-600">Bidang Keahlian</span>
+                                    <span class="font-semibold text-gray-800">${subject}</span>
+                                </div>
+                                <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                                    <span class="font-medium text-gray-600">Status Akun</span>
+                                    <span class="font-semibold text-green-600">Aktif</span>
+                                </div>
+                            </div>
+
+                            <p class="text-center mt-6 text-sm text-gray-500">Anda dapat mengubah detail profil melalui Admin Sistem.</p>
+                        </div>
+                    </main>
+                </div>
+            `;
+        }
+
+        // Fungsi Render Utama
+        function render() {
+            let htmlContent = '';
+
+            switch (pageState.view) {
+                case 'login':
+                    htmlContent = renderLogin();
+                    break;
+
+                // --- Admin Views ---
+                case 'admin_dashboard':
+                    htmlContent = renderAdminDashboard();
+                    break;
+                case 'surat_admin':
+                    htmlContent = renderManajemenSuratAdmin();
+                    break;
+                case 'akun_admin':
+                    htmlContent = renderManajemenPenggunaAdmin();
+                    break;
+                case 'raport_admin':
+                    htmlContent = renderRaportAdmin();
+                    break;
+                case 'publikasi_admin':
+                    htmlContent = renderPublikasiAdmin();
+                    break;
+
+                // --- Pengajar Views ---
+                case 'pengajar_dashboard':
+                    htmlContent = renderPengajarDashboard();
+                    break;
+                case 'surat_pengajar':
+                    htmlContent = renderPengajuanSuratPengajar();
+                    break;
+                case 'raport_pengajar':
+                    htmlContent = renderRaportPengajar();
+                    break;
+                case 'publikasi_pengajar':
+                    htmlContent = renderPublikasiPengajar();
+                    break;
+                case 'profile_pengajar':
+                    htmlContent = renderProfilePengajar();
+                    break;
+
+                default:
+                    htmlContent = renderLogin();
+            }
+
+            appDiv.innerHTML = htmlContent;
+            // Attach event listeners after content is rendered
+            if (pageState.view === 'login') {
+                document.getElementById('login-form').addEventListener('submit', handleLogin);
+            }
+        }
+        
+        // Initial render
+        render();
+    </script>
+</body>
+</html>
